@@ -1,0 +1,68 @@
+import React, { useEffect, useRef } from 'react';
+import { Sparkles, Loader2 } from 'lucide-react';
+import { useStore } from '../store';
+
+export default function HistoryList() {
+  const { history, loadingStep } = useStore();
+  const threadRef = useRef(null);
+
+  useEffect(() => {
+    if (threadRef.current) {
+        threadRef.current.scrollTop = threadRef.current.scrollHeight;
+    }
+  }, [history, loadingStep]);
+
+  return (
+    <div ref={threadRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-6 custom-scrollbar">
+      {/* Initial AI Message */}
+      <div className="flex flex-col gap-2 items-start">
+          <div className="max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-transparent text-gray-300">
+              <div className="flex items-center gap-2 mb-2 font-medium text-white">
+                  <Sparkles className="w-4 h-4 text-brand-pink" /> Alock AI
+              </div>
+              <p>Hello. I am the Alock AI Copilot. What kind of UI would you like to build today?</p>
+          </div>
+      </div>
+
+      {history.map((item, idx) => {
+        if (item.type === 'user') {
+          return (
+            <div key={idx} className="flex flex-col gap-2 items-end">
+                <div className="max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-[#111] border border-[#1F1F22] text-gray-200 rounded-tr-sm">
+                    <p>{item.content}</p>
+                </div>
+            </div>
+          );
+        } else {
+          return (
+            <div key={idx} className="flex flex-col gap-2 items-start">
+                <div className="max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-transparent text-gray-300">
+                    <div className="flex items-center gap-2 mb-2 font-medium text-white">
+                        <Sparkles className="w-4 h-4 text-brand-pink" /> Alock AI
+                    </div>
+                    <p>{item.content}</p>
+                </div>
+            </div>
+          );
+        }
+      })}
+
+      {(loadingStep === 'enhancing' || loadingStep === 'generating' || loadingStep === 'building') && (
+        <div className="flex flex-col gap-2 items-start">
+            <div className="max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-transparent text-gray-300">
+                <div className="flex items-center gap-2 mb-2 font-medium text-white">
+                    <Sparkles className="w-4 h-4 text-brand-pink" /> Alock AI
+                </div>
+                <div className="flex items-center gap-2 text-gray-400">
+                    <Loader2 className="w-4 h-4 animate-spin text-brand-pink" />
+                    <span className="animate-pulse">
+                      {loadingStep === 'enhancing' ? 'Analyzing your request...' : 
+                       loadingStep === 'generating' ? 'Writing code...' : 'Firing up WebContainer...'}
+                    </span>
+                </div>
+            </div>
+        </div>
+      )}
+    </div>
+  );
+}
