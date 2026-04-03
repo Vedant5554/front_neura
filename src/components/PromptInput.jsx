@@ -1,15 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Paperclip, Send } from 'lucide-react';
 import { useStore } from '../store';
-import { enhancePrompt, generateComponentCode } from '../services/api';
+import { generateComponentCode } from '../services/api';
 import { useWebContainer } from '../hooks/useWebContainer';
 import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 
 export default function PromptInput() {
   const [inputValue, setInputValue] = useState('');
-  const { setPrompt, setLoadingStep, setGeneratedCode, addHistory, loadingStep, setActiveTab } = useStore();
-  const { bootAndMount } = useWebContainer();
+  const { 
+    setPrompt, setLoadingStep, setGeneratedCode, addHistory, 
+    loadingStep, setActiveTab, setJobProgress, setIframeUrl, userId 
+  } = useStore();
+  const { bootAndMount, hotUpdate } = useWebContainer();
   const textareaRef = useRef(null);
 
   const isGenerating = loadingStep !== 'idle' && loadingStep !== 'ready';
@@ -25,23 +28,35 @@ export default function PromptInput() {
     }
 
     setPrompt(userMessage);
+    setIframeUrl(null); // Clear old preview
+    setJobProgress(0);
     addHistory({ type: 'user', content: userMessage, timestamp: Date.now() });
     
     try {
       setLoadingStep('enhancing');
-      const enhanced = await enhancePrompt(userMessage);
-      
-      setLoadingStep('generating');
-      const code = await generateComponentCode(enhanced);
+
+      // Call the backend — it handles the full pipeline internally
+      // (prompt enhancement → code generation → debugging → validation)
+      const result = await generateComponentCode(userMessage, userId, {
+        onProgress: (progress, step) => {
+          setJobProgress(progress);
+          setLoadingStep(step);
+        }
+      });
+
+      const code = typeof result === 'string' ? result : result.code;
       setGeneratedCode(code);
       
-      await bootAndMount(code);
-      addHistory({ type: 'ai', content: "I've generated the UI component for you. You can preview it on the right or view the source code.", timestamp: Date.now() });
+      // hotUpdate will do a full bootAndMount on first run,
+      // and just overwrite the component file on subsequent runs (faster via Vite HMR)
+      await hotUpdate(code);
+      addHistory({ type: 'ai', content: "I've generated the code for you. Check the preview on the right!", timestamp: Date.now() });
       setActiveTab('preview');
       toast.success('Component generated successfully!');
     } catch (err) {
-      toast.error('Generation failed.');
+      toast.error('Generation failed: ' + err.message);
       setLoadingStep('idle');
+      setJobProgress(0);
     }
   };
 
@@ -83,7 +98,7 @@ export default function PromptInput() {
                 <button 
                   type="submit" 
                   disabled={!inputValue.trim() || isGenerating}
-                  className={`p-1.5 rounded-lg flex items-center justify-center transition-all \${(!inputValue.trim() || isGenerating) ? 'bg-white/5 text-gray-500 cursor-not-allowed' : 'bg-brand-pink text-white hover:bg-[#D40047] shadow-[0_0_15px_rgba(255,0,85,0.3)]'}`}
+                  className={`p-1.5 rounded-lg flex items-center justify-center transition-all ${(!inputValue.trim() || isGenerating) ? 'bg-white/5 text-gray-500 cursor-not-allowed' : 'bg-brand-pink text-white hover:bg-[#D40047] shadow-[0_0_15px_rgba(255,0,85,0.3)]'}`}
                 >
                   <Send className="w-4 h-4" />
                 </button>

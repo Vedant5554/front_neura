@@ -1,15 +1,20 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+// Generate a stable userId once and persist it
+function generateUserId() {
+  return 'user-' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+}
+
 export const useStore = create(
   persist(
     (set) => ({
       prompt: '',
       setPrompt: (prompt) => set({ prompt }),
-      history: [], // Elements should be { type: 'user' | 'ai', content: string, timestamp: number }
+      history: [], // Elements: { type: 'user' | 'ai', content: string, timestamp: number }
       addHistory: (item) => set((state) => ({ history: [...state.history, item] })),
       clearHistory: () => set({ history: [] }),
-      loadingStep: 'idle',
+      loadingStep: 'idle', // 'idle' | 'enhancing' | 'generating' | 'building' | 'ready'
       setLoadingStep: (step) => set({ loadingStep: step }),
       generatedCode: '',
       setGeneratedCode: (code) => set({ generatedCode: code }),
@@ -21,6 +26,13 @@ export const useStore = create(
       setError: (error) => set({ error }),
       iframeUrl: null,
       setIframeUrl: (url) => set({ iframeUrl: url }),
+
+      // Progress tracking (0-100 from backend)
+      jobProgress: 0,
+      setJobProgress: (progress) => set({ jobProgress: progress }),
+
+      // Persistent user ID for backend history
+      userId: generateUserId(),
 
       // UI states
       activeTab: 'preview', // 'preview' | 'code'
@@ -46,6 +58,7 @@ export const useStore = create(
         viewport: state.viewport,
         isSidebarOpen: state.isSidebarOpen,
         currentView: state.currentView,
+        userId: state.userId,
       }),
     }
   )

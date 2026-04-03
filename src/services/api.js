@@ -1,33 +1,101 @@
 import axios from 'axios';
 
-// The backend doesn't exist yet, so we are mocking the Axios API calls
-// to prevent the frontend from crashing during development.
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const api = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: API_BASE_URL,
 });
 
-// Mock interceptor to catch generation requests and return dummy data 
-// instead of throwing network errors while the backend is on hold.
-api.interceptors.request.use(config => {
-  // If we're making a POST request to generate code
-  if (config.url === '/generate' && config.method === 'post') {
-    // Throw a specific mock error so we can catch it in App.jsx and use the dummy code
-    return Promise.reject({ isMock: true, prompt: config.data.prompt });
-  }
-  return config;
-});
-
-// Mock function: simulates prompt enhancement
-export async function enhancePrompt(prompt) {
-  await new Promise(resolve => setTimeout(resolve, 800));
-  return `Enhanced: ${prompt}`;
+/**
+ * Maps backend job progress (0-100) to human-readable loading step names.
+ */
+function progressToStep(progress) {
+  if (progress <= 10) return 'enhancing';
+  if (progress <= 40) return 'generating';
+  if (progress <= 70) return 'generating';
+  if (progress <= 90) return 'generating';
+  return 'building';
 }
 
-// Mock function: simulates AI code generation
-export async function generateComponentCode(enhancedPrompt) {
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  return `import React from 'react';\n\nexport default function App() {\n  return (\n    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-4">\n      <h1 className="text-4xl font-bold text-fuchsia-400 mb-4">Generated Component</h1>\n      <p className="text-slate-300 max-w-md text-center">${enhancedPrompt}</p>\n      <div className="mt-8 p-8 border border-fuchsia-500/30 rounded-2xl bg-slate-800/50">\n        <div className="grid grid-cols-3 gap-2">\n           {[1,2,3,4,5,6,7,8,9].map(i => <div key={i} className="w-16 h-16 bg-slate-700 rounded-lg flex items-center justify-center hover:bg-fuchsia-500/50 cursor-pointer transition-colors border border-slate-600">{i}</div>)}\n        </div>\n      </div>\n    </div>\n  );\n}\n`;
+/**
+ * Generates a component via the backend pipeline.
+ * The backend handles: prompt enhancement → code generation → debugging → validation.
+ *
+ * @param {string} prompt - The raw user prompt
+ * @param {string} userId - Persistent user ID for history tracking
+ * @param {object} callbacks - Optional callbacks for progress tracking
+ * @param {function} callbacks.onProgress - Called with (progress: number, step: string)
+ * @returns {Promise<{code: string, validated: boolean, componentId: string}>}
+ */
+export async function generateComponentCode(prompt, userId, callbacks = {}) {
+  const { onProgress } = callbacks;
+
+  // 1. Queue the generation job (or get cache hit)
+  const response = await api.post('/generate', { prompt, userId });
+  const data = response.data;
+
+  // Handle cache hit — backend returns completed result immediately with no jobId
+  if (data.status === 'completed' && data.result) {
+    if (onProgress) onProgress(100, 'building');
+    return data.result;
+  }
+
+  const { jobId, error } = data;
+  if (error || !jobId) {
+    throw new Error(error || 'Failed to start generation job');
+  }
+
+  if (onProgress) onProgress(5, 'enhancing');
+
+  // 2. Poll for job completion
+  const POLL_INTERVAL = 2000; // 2 seconds
+  const MAX_POLL_TIME = 5 * 60 * 1000; // 5 minute timeout
+  const startTime = Date.now();
+
+  while (true) {
+    if (Date.now() - startTime > MAX_POLL_TIME) {
+      throw new Error('Generation timed out after 5 minutes');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+
+    const statusRes = await api.get(`/generate/status/${jobId}`);
+    const { status, progress, result, error: jobError } = statusRes.data;
+
+    if (status === 'completed') {
+      if (onProgress) onProgress(100, 'building');
+      return result;
+    }
+
+    if (status === 'failed') {
+      throw new Error(jobError || 'Job failed during generation process');
+    }
+
+    // Update progress for queued/active states
+    if (onProgress && typeof progress === 'number') {
+      onProgress(progress, progressToStep(progress));
+    }
+  }
+}
+
+/**
+ * Fetch generation history for a user from the backend.
+ * @param {string} userId
+ * @returns {Promise<Array>}
+ */
+export async function fetchHistory(userId) {
+  const response = await api.get(`/history/${userId}`);
+  return response.data.history || [];
+}
+
+/**
+ * Delete a component from history.
+ * @param {string} componentId
+ * @returns {Promise<boolean>}
+ */
+export async function deleteComponent(componentId) {
+  const response = await api.delete(`/component/${componentId}`);
+  return response.data.success;
 }
 
 export default api;

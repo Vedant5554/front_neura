@@ -2,106 +2,358 @@ import { WebContainer } from '@webcontainer/api';
 import { useStore } from '../store';
 
 let webcontainerInstance = null;
+let currentDevProcess = null;
+let isBooting = false;
+let bootPromise = null;
+let mountCounter = 0;
 
-export function useWebContainer() {
-  const { setLoadingStep, setIframeUrl, iframeUrl, loadingStep } = useStore();
+/**
+ * Pre-built Vite + React project template.
+ * The generated component goes into src/GeneratedComponent.jsx
+ * and is imported/rendered by a stable App.jsx wrapper.
+ */
+function buildProjectFiles(componentCode) {
+  // Strip markdown fences the AI might wrap code in
+  let cleaned = componentCode;
+  cleaned = cleaned.replace(/^```(?:jsx?|tsx?|javascript|typescript)?\s*\n?/i, '');
+  cleaned = cleaned.replace(/\n?```\s*$/i, '');
+  cleaned = cleaned.trim();
 
-  async function bootAndMount(code) {
-    try {
-      setLoadingStep('building');
-      
-      if (!webcontainerInstance) {
-        webcontainerInstance = await WebContainer.boot();
-      }
-
-      const files = {
-        'package.json': {
-          file: {
-            contents: JSON.stringify({
-              name: "preview",
-              type: "module",
-              dependencies: {
-                "react": "^18.2.0",
-                "react-dom": "^18.2.0",
-                "lucide-react": "latest"
-              },
-              devDependencies: {
-                "@vitejs/plugin-react": "^4.0.0",
-                "vite": "^4.4.5"
-              },
-              scripts: {
-                "dev": "vite"
-              }
-            }, null, 2)
+  return {
+    'package.json': {
+      file: {
+        contents: JSON.stringify({
+          name: 'preview-app',
+          private: true,
+          version: '1.0.0',
+          type: 'module',
+          scripts: {
+            dev: 'vite --host'
+          },
+          dependencies: {
+            react: '^18.2.0',
+            'react-dom': '^18.2.0',
+            'lucide-react': '^0.300.0'
+          },
+          devDependencies: {
+            '@vitejs/plugin-react': '^4.2.1',
+            vite: '^5.0.12'
           }
-        },
-        'index.html': {
-          file: {
-            contents: `<!DOCTYPE html>
+        }, null, 2)
+      }
+    },
+
+    'vite.config.js': {
+      file: {
+        contents: `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3111,
+    strictPort: false,
+    hmr: { overlay: true }
+  }
+});
+`
+      }
+    },
+
+    'index.html': {
+      file: {
+        contents: `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>body { background-color: #0f172a; color: white; }</style>
+    <script src="https://cdn.tailwindcss.com"><\/script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+      *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; min-height: 100vh; font-family: 'Inter', system-ui, sans-serif; }
+      body { background-color: #0f172a; color: white; }
+      #root { min-height: 100vh; width: 100%; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" src="/src/main.jsx"><\/script>
   </body>
 </html>`
-          }
-        },
-        'vite.config.js': {
+      }
+    },
+
+    src: {
+      directory: {
+        'main.jsx': {
           file: {
-            contents: `import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-export default defineConfig({ plugins: [react()] })`
+            contents: `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+`
           }
         },
-        'src': {
-          directory: {
-            'main.jsx': {
-              file: {
-                contents: `import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode><App /></React.StrictMode>,
-)`
-              }
-            },
-            'App.jsx': {
-              file: {
-                contents: code
-              }
-            }
+
+        // Stable App wrapper — imports the generated component with error boundary
+        'App.jsx': {
+          file: {
+            contents: `import React from 'react';
+import GeneratedComponent from './GeneratedComponent';
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          padding: '2rem',
+          fontFamily: 'monospace',
+          color: '#ef4444',
+          background: '#0f172a',
+          minHeight: '100vh',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word'
+        }}>
+          <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem' }}>⚠️ Render Error</h2>
+          <p>{this.state.error?.message || 'Unknown error'}</p>
+          <pre style={{ marginTop: '1rem', fontSize: '0.75rem', color: '#94a3b8' }}>
+            {this.state.error?.stack}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <GeneratedComponent />
+    </ErrorBoundary>
+  );
+}
+`
+          }
+        },
+
+        // The generated code goes here.
+        // We handle multiple export patterns by re-exporting safely.
+        'GeneratedComponent.jsx': {
+          file: {
+            contents: buildComponentWrapper(cleaned)
           }
         }
-      };
+      }
+    }
+  };
+}
 
-      await webcontainerInstance.mount(files);
+/**
+ * Wrap the generated code so it always has a valid default export.
+ * Handles cases where the AI generates:
+ *   - export default function Foo()    → works as-is
+ *   - export default class Foo         → works as-is
+ *   - function Foo() {} export default Foo  → works as-is
+ *   - const Foo = () => {} export default Foo → works as-is
+ *   - No export at all                → we find the component and export it
+ */
+function buildComponentWrapper(code) {
+  // If code already has `export default`, use it directly
+  if (/export\s+default\s/.test(code)) {
+    return code;
+  }
 
-      const installProcess = await webcontainerInstance.spawn('npm', ['install']);
-      await installProcess.exit;
+  // Try to find a function/class/const component declaration and export it
+  // Look for: function ComponentName, const ComponentName, class ComponentName
+  const funcMatch = code.match(/(?:function|class)\s+([A-Z][A-Za-z0-9]*)/);
+  const constMatch = code.match(/(?:const|let|var)\s+([A-Z][A-Za-z0-9]*)\s*=/);
+  const componentName = funcMatch?.[1] || constMatch?.[1];
 
-      const devProcess = await webcontainerInstance.spawn('npm', ['run', 'dev']);
+  if (componentName) {
+    return `${code}\n\nexport default ${componentName};\n`;
+  }
 
-      webcontainerInstance.on('server-ready', (port, url) => {
+  // Last resort: wrap entire code in a component
+  return `import React from 'react';
+
+function GeneratedComponent() {
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'monospace', color: '#94a3b8', background: '#0f172a', minHeight: '100vh' }}>
+      <p>⚠️ Could not detect a valid React component in the generated code.</p>
+      <pre style={{ marginTop: '1rem', fontSize: '0.8rem', whiteSpace: 'pre-wrap' }}>${code.replace(/`/g, '\\`').replace(/\$/g, '\\$')}</pre>
+    </div>
+  );
+}
+
+export default GeneratedComponent;
+`;
+}
+
+
+export function useWebContainer() {
+  const { setLoadingStep, setIframeUrl, iframeUrl, loadingStep } = useStore();
+
+  /**
+   * Boot the singleton WebContainer instance.
+   * Returns the instance, de-duplicating concurrent boot calls.
+   */
+  async function ensureBooted() {
+    if (webcontainerInstance) return webcontainerInstance;
+
+    if (isBooting && bootPromise) return bootPromise;
+
+    isBooting = true;
+    bootPromise = WebContainer.boot().then((instance) => {
+      webcontainerInstance = instance;
+      isBooting = false;
+      return instance;
+    }).catch((err) => {
+      isBooting = false;
+      bootPromise = null;
+      throw err;
+    });
+
+    return bootPromise;
+  }
+
+  /**
+   * Kill the currently running dev server process.
+   */
+  async function teardownDevServer() {
+    if (currentDevProcess) {
+      try { currentDevProcess.kill(); } catch (_) {}
+      currentDevProcess = null;
+    }
+  }
+
+  /**
+   * Mount the generated code, install deps, and start Vite.
+   * On re-mount: kills old dev server, re-writes files, re-runs install+dev.
+   */
+  async function bootAndMount(code) {
+    const thisMountId = ++mountCounter;
+
+    try {
+      setLoadingStep('building');
+      setIframeUrl(null);
+
+      // Tear down previous dev server
+      await teardownDevServer();
+
+      // Boot WebContainer (singleton)
+      const wc = await ensureBooted();
+
+      // Check if this mount is still current (user might have triggered another)
+      if (thisMountId !== mountCounter) return;
+
+      // Mount the complete project files
+      const files = buildProjectFiles(code);
+      await wc.mount(files);
+
+      if (thisMountId !== mountCounter) return;
+
+      // --- npm install ---
+      console.log('[WebContainer] Running npm install...');
+      const installProcess = await wc.spawn('npm', ['install']);
+
+      // Log output
+      installProcess.output.pipeTo(new WritableStream({
+        write(chunk) {
+          console.log('[npm install]', chunk);
+        }
+      })).catch(() => {});
+
+      const installExit = await installProcess.exit;
+      if (installExit !== 0) {
+        console.error('[WebContainer] npm install failed, exit code:', installExit);
+        setLoadingStep('idle');
+        return;
+      }
+
+      if (thisMountId !== mountCounter) return;
+
+      // --- Start Vite dev server ---
+      console.log('[WebContainer] Starting Vite dev server...');
+      currentDevProcess = await wc.spawn('npm', ['run', 'dev']);
+
+      currentDevProcess.output.pipeTo(new WritableStream({
+        write(chunk) {
+          console.log('[vite]', chunk);
+        }
+      })).catch(() => {});
+
+      // Listen for server-ready
+      wc.on('server-ready', (port, url) => {
+        if (thisMountId !== mountCounter) return; // stale listener guard
+        console.log('[WebContainer] Server ready:', url, 'port:', port);
         setIframeUrl(url);
         setLoadingStep('ready');
       });
-      
+
     } catch (err) {
-      console.error(err);
-      setLoadingStep('idle');
+      console.error('[WebContainer] Error:', err);
+      if (thisMountId === mountCounter) {
+        setLoadingStep('idle');
+      }
+    }
+  }
+
+  /**
+   * Hot-update: If WebContainer is already running, just overwrite
+   * the GeneratedComponent.jsx file without re-installing deps.
+   */
+  async function hotUpdate(code) {
+    if (!webcontainerInstance) {
+      return bootAndMount(code);
+    }
+
+    const thisMountId = ++mountCounter;
+
+    try {
+      setLoadingStep('building');
+
+      let cleaned = code;
+      cleaned = cleaned.replace(/^```(?:jsx?|tsx?|javascript|typescript)?\s*\n?/i, '');
+      cleaned = cleaned.replace(/\n?```\s*$/i, '');
+      cleaned = cleaned.trim();
+
+      const wrappedCode = buildComponentWrapper(cleaned);
+
+      await webcontainerInstance.fs.writeFile('/src/GeneratedComponent.jsx', wrappedCode);
+      console.log('[WebContainer] Hot-updated GeneratedComponent.jsx');
+
+      // Vite HMR should pick this up automatically
+      // If not already ready, the server-ready listener will fire
+      if (loadingStep === 'ready' || iframeUrl) {
+        setLoadingStep('ready');
+      }
+    } catch (err) {
+      console.error('[WebContainer] Hot update error:', err);
+      // Fall back to full mount
+      return bootAndMount(code);
     }
   }
 
   return {
     bootAndMount,
+    hotUpdate,
     startWebContainer: bootAndMount,
+    teardownDevServer,
     previewUrl: iframeUrl,
     isBooted: loadingStep === 'ready',
     isBuilding: loadingStep === 'building',

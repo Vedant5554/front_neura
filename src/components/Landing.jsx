@@ -1,14 +1,17 @@
 import React, { useState, useRef } from 'react';
 import { Send, Sparkles, Code2, Zap, LayoutTemplate, ArrowRight, Github, CheckCircle2, BarChart3, Users, Settings } from 'lucide-react';
 import { useStore } from '../store';
-import { enhancePrompt, generateComponentCode } from '../services/api';
+import { generateComponentCode } from '../services/api';
 import { useWebContainer } from '../hooks/useWebContainer';
 import toast from 'react-hot-toast';
 import { motion, useScroll, useTransform } from 'framer-motion';
 
 export default function Landing() {
     const [inputValue, setInputValue] = useState('');
-    const { setCurrentView, setPrompt, setLoadingStep, setGeneratedCode, addHistory, setActiveTab } = useStore();
+    const { 
+        setCurrentView, setPrompt, setLoadingStep, setGeneratedCode, 
+        addHistory, setActiveTab, setJobProgress, setIframeUrl, userId 
+    } = useStore();
     const { bootAndMount } = useWebContainer();
     const textareaRef = useRef(null);
 
@@ -22,26 +25,41 @@ export default function Landing() {
 
         const userMessage = inputValue;
 
-        // Set view to canvas to show loading state
+        // Switch to canvas view to show loading state
         setCurrentView('canvas');
         setPrompt(userMessage);
+        setIframeUrl(null); // Clear old preview
+        setJobProgress(0);
         addHistory({ type: 'user', content: userMessage, timestamp: Date.now() });
 
         try {
             setLoadingStep('enhancing');
-            const enhanced = await enhancePrompt(userMessage);
 
-            setLoadingStep('generating');
-            const code = await generateComponentCode(enhanced);
+            // Call the backend — it handles the full pipeline internally
+            // (prompt enhancement → code generation → debugging → validation)
+            const result = await generateComponentCode(userMessage, userId, {
+                onProgress: (progress, step) => {
+                    setJobProgress(progress);
+                    setLoadingStep(step);
+                }
+            });
+
+            const code = typeof result === 'string' ? result : result.code;
             setGeneratedCode(code);
 
+            // Boot WebContainer with the generated code
             await bootAndMount(code);
-            addHistory({ type: 'ai', content: "I've generated the UI component for you. You can preview it on the right or view the source code.", timestamp: Date.now() });
+            addHistory({ 
+                type: 'ai', 
+                content: "I've generated the UI component for you. You can preview it on the right or view the source code.", 
+                timestamp: Date.now() 
+            });
             setActiveTab('preview');
             toast.success('Component generated successfully!');
         } catch (err) {
-            toast.error('Generation failed.');
+            toast.error('Generation failed: ' + err.message);
             setLoadingStep('idle');
+            setJobProgress(0);
         }
     };
 

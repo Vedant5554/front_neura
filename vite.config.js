@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5173,
     host: '0.0.0.0', // expose network
     headers: {
-      "Cross-Origin-Embedder-Policy": "require-corp",
+      "Cross-Origin-Embedder-Policy": "credentialless",
       "Cross-Origin-Opener-Policy": "same-origin",
     },
     // Allows Cloudflare Tunnels to bypass strict host checking

@@ -3,12 +3,14 @@ import { Plus } from 'lucide-react';
 import { useStore } from '../store';
 
 export default function Header() {
-  const { clearHistory, setGeneratedCode, setLoadingStep } = useStore();
+  const { clearHistory, setGeneratedCode, setLoadingStep, setIframeUrl, setJobProgress } = useStore();
 
   const resetSession = () => {
     clearHistory();
     setGeneratedCode('');
     setLoadingStep('idle');
+    setIframeUrl(null);
+    setJobProgress(0);
   };
 
   return (
