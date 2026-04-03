@@ -1,21 +1,31 @@
 import React, { useState, useRef } from 'react';
-import { Paperclip, Send } from 'lucide-react';
+import { Paperclip, Send, ChevronDown } from 'lucide-react';
 import { useStore } from '../store';
 import { generateComponentCode } from '../services/api';
-import { useWebContainer } from '../hooks/useWebContainer';
 import toast from 'react-hot-toast';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const PROVIDERS = [
+  { id: 'gemini', label: 'Gemini', icon: '✦' },
+  { id: 'openrouter', label: 'OpenRouter', icon: '⚡' },
+  { id: 'groq', label: 'Groq', icon: '🚀' },
+  { id: 'ollama', label: 'Ollama', icon: '🦙' },
+];
 
 export default function PromptInput() {
   const [inputValue, setInputValue] = useState('');
+  const [showProviderMenu, setShowProviderMenu] = useState(false);
   const { 
     setPrompt, setLoadingStep, setGeneratedCode, addHistory, 
-    loadingStep, setActiveTab, setJobProgress, setIframeUrl, userId 
+    loadingStep, setActiveTab, setJobProgress, setIframeUrl, userId,
+    provider, setProvider, model,
+    activeAbortController, setActiveAbortController
   } = useStore();
-  const { bootAndMount, hotUpdate } = useWebContainer();
   const textareaRef = useRef(null);
+  const menuRef = useRef(null);
 
   const isGenerating = loadingStep !== 'idle' && loadingStep !== 'ready';
+  const currentProvider = PROVIDERS.find(p => p.id === provider) || PROVIDERS[0];
 
   const handleGenerate = async (e) => {
     if (e) e.preventDefault();
@@ -28,35 +38,45 @@ export default function PromptInput() {
     }
 
     setPrompt(userMessage);
-    setIframeUrl(null); // Clear old preview
+    setGeneratedCode(''); // Clear old preview
     setJobProgress(0);
     addHistory({ type: 'user', content: userMessage, timestamp: Date.now() });
     
     try {
       setLoadingStep('enhancing');
 
-      // Call the backend — it handles the full pipeline internally
-      // (prompt enhancement → code generation → debugging → validation)
+      const abortController = new AbortController();
+      setActiveAbortController(abortController);
+
+      // Call the backend
       const result = await generateComponentCode(userMessage, userId, {
         onProgress: (progress, step) => {
           setJobProgress(progress);
           setLoadingStep(step);
         }
+      }, {
+        provider,
+        model: model || undefined,
+        signal: abortController.signal
       });
 
       const code = typeof result === 'string' ? result : result.code;
       setGeneratedCode(code);
-      
-      // hotUpdate will do a full bootAndMount on first run,
-      // and just overwrite the component file on subsequent runs (faster via Vite HMR)
-      await hotUpdate(code);
-      addHistory({ type: 'ai', content: "I've generated the code for you. Check the preview on the right!", timestamp: Date.now() });
+      setLoadingStep('ready');
+      addHistory({ type: 'ai', content: "I've generated the page for you. Check the preview on the right!", timestamp: Date.now() });
       setActiveTab('preview');
-      toast.success('Component generated successfully!');
+      setActiveAbortController(null);
+      toast.success('Page generated successfully!');
     } catch (err) {
+      if (err.message === 'Generation cancelled by user' || err.name === 'CanceledError') {
+        // Discard gracefully if user clicked Stop
+        setActiveAbortController(null);
+        return;
+      }
       toast.error('Generation failed: ' + err.message);
       setLoadingStep('idle');
       setJobProgress(0);
+      setActiveAbortController(null);
     }
   };
 
@@ -92,16 +112,81 @@ export default function PromptInput() {
                 rows="1"
             />
             <div className="flex items-center justify-between mt-2 px-2 pb-1">
-                <button type="button" className="text-gray-500 hover:text-gray-300 transition p-1">
-                    <Paperclip className="w-4 h-4" />
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={!inputValue.trim() || isGenerating}
-                  className={`p-1.5 rounded-lg flex items-center justify-center transition-all ${(!inputValue.trim() || isGenerating) ? 'bg-white/5 text-gray-500 cursor-not-allowed' : 'bg-brand-pink text-white hover:bg-[#D40047] shadow-[0_0_15px_rgba(255,0,85,0.3)]'}`}
-                >
-                  <Send className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                    <button type="button" className="text-gray-500 hover:text-gray-300 transition p-1">
+                        <Paperclip className="w-4 h-4" />
+                    </button>
+
+                    {/* Provider Selector */}
+                    <div className="relative" ref={menuRef}>
+                        <button
+                            type="button"
+                            onClick={() => setShowProviderMenu(!showProviderMenu)}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white/5 text-gray-400 hover:text-gray-200 hover:bg-white/10 transition-all border border-white/5"
+                        >
+                            <span>{currentProvider.icon}</span>
+                            <span>{currentProvider.label}</span>
+                            <ChevronDown className={`w-3 h-3 transition-transform ${showProviderMenu ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        <AnimatePresence>
+                            {showProviderMenu && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 4, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute bottom-full mb-2 left-0 bg-[#1a1a1d] border border-[#2a2a2e] rounded-xl shadow-xl overflow-hidden min-w-[150px] z-50"
+                                >
+                                    {PROVIDERS.map((p) => (
+                                        <button
+                                            key={p.id}
+                                            type="button"
+                                            onClick={() => { setProvider(p.id); setShowProviderMenu(false); }}
+                                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors ${
+                                                provider === p.id 
+                                                    ? 'bg-brand-pink/10 text-brand-pink' 
+                                                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                                            }`}
+                                        >
+                                            <span className="text-sm">{p.icon}</span>
+                                            <span>{p.label}</span>
+                                            {provider === p.id && <span className="ml-auto text-[10px]">✓</span>}
+                                        </button>
+                                    ))}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                </div>
+
+                  <div className="flex items-center">
+                    {isGenerating ? (
+                        <button 
+                            type="button" 
+                            onClick={(e) => {
+                                e.preventDefault();
+                                if (activeAbortController) {
+                                    activeAbortController.abort();
+                                    setLoadingStep('idle');
+                                    setJobProgress(0);
+                                    toast('Generation stopped');
+                                }
+                            }}
+                            className="p-1.5 rounded-lg flex items-center justify-center transition-all bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white"
+                        >
+                            <span className="w-4 h-4 rounded-sm bg-current"></span>
+                        </button>
+                    ) : (
+                        <button 
+                            type="submit" 
+                            disabled={!inputValue.trim()}
+                            className={`p-1.5 rounded-lg flex items-center justify-center transition-all ${(!inputValue.trim()) ? 'bg-white/5 text-gray-500 cursor-not-allowed' : 'bg-brand-pink text-white hover:bg-[#D40047] shadow-[0_0_15px_rgba(255,0,85,0.3)]'}`}
+                        >
+                            <Send className="w-4 h-4" />
+                        </button>
+                    )}
+                  </div>
             </div>
         </motion.form>
         <div className="text-center mt-3">
