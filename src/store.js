@@ -34,6 +34,12 @@ export const useStore = create(
       // Persistent user ID for backend history
       userId: generateUserId(),
 
+      // AI Provider selection
+      provider: 'gemini', // 'gemini' | 'openrouter'
+      setProvider: (provider) => set({ provider }),
+      model: '', // optional model override (empty = use provider default)
+      setModel: (model) => set({ model }),
+
       // UI states
       activeTab: 'preview', // 'preview' | 'code'
       setActiveTab: (tab) => set({ activeTab: tab }),
@@ -45,6 +51,25 @@ export const useStore = create(
       // Navigation
       currentView: 'landing', // 'landing' | 'canvas'
       setCurrentView: (view) => set({ currentView: view }),
+
+      // Abort controller for API cancellation
+      activeAbortController: null,
+      setActiveAbortController: (controller) => set({ activeAbortController: controller }),
+
+      resetAllData: () => set((state) => ({
+        prompt: '',
+        history: [],
+        loadingStep: 'idle',
+        generatedCode: '',
+        currentComponent: null,
+        loading: false,
+        error: null,
+        iframeUrl: null,
+        jobProgress: 0,
+        activeTab: 'preview',
+        userId: generateUserId(), // Generate new user identity
+        // Notice we DO NOT reset currentView to keep them on the current page
+      })),
     }),
     {
       name: 'neura-store', // localStorage key
@@ -59,6 +84,8 @@ export const useStore = create(
         isSidebarOpen: state.isSidebarOpen,
         currentView: state.currentView,
         userId: state.userId,
+        provider: state.provider,
+        model: state.model,
       }),
     }
   )

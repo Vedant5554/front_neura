@@ -123,15 +123,17 @@ export default function PreviewPanel() {
                                     <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-[#1A1A1A] rounded-b-xl z-50"></div>
                                 )}
                                 
-                                {iframeUrl ? (
+                                {generatedCode ? (
                                     <iframe 
-                                      src={iframeUrl} 
+                                      srcDoc={generatedCode}
                                       className={`w-full h-full border-0 bg-white ${viewport === 'mobile' ? 'pt-6' : ''}`}
                                       title="Preview"
-                                      allow="cross-origin-isolated"
+                                      sandbox="allow-scripts allow-popups allow-forms allow-modals"
                                     />
                                 ) : (
-                                    <div className="text-gray-500 text-sm">Building Preview...</div>
+                                    <div className="text-gray-500 text-sm">
+                                      {isGenerating ? 'Generating...' : 'No preview yet'}
+                                    </div>
                                 )}
                             </div>
                         </div>

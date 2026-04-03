@@ -33,7 +33,9 @@ function buildProjectFiles(componentCode) {
           dependencies: {
             react: '^18.2.0',
             'react-dom': '^18.2.0',
-            'lucide-react': '^0.300.0'
+            'lucide-react': '^0.300.0',
+            'framer-motion': '^11.0.0',
+            'recharts': '^2.10.0'
           },
           devDependencies: {
             '@vitejs/plugin-react': '^4.2.1',
@@ -69,12 +71,64 @@ export default defineConfig({
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Preview</title>
     <script src="https://cdn.tailwindcss.com"><\/script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            },
+            colors: {
+              brand: {
+                pink: '#FF0055',
+                purple: '#7C3AED',
+                blue: '#3B82F6',
+              }
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-out forwards',
+              'slide-up': 'slideUp 0.5s ease-out forwards',
+              'slide-down': 'slideDown 0.4s ease-out forwards',
+              'scale-in': 'scaleIn 0.3s ease-out forwards',
+              'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              slideDown: {
+                '0%': { opacity: '0', transform: 'translateY(-10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              scaleIn: {
+                '0%': { opacity: '0', transform: 'scale(0.95)' },
+                '100%': { opacity: '1', transform: 'scale(1)' },
+              },
+              pulseSoft: {
+                '0%, 100%': { opacity: '1' },
+                '50%': { opacity: '0.7' },
+              },
+            },
+          }
+        }
+      }
+    <\/script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <style>
       *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 100%; min-height: 100vh; font-family: 'Inter', system-ui, sans-serif; }
-      body { background-color: #0f172a; color: white; }
+      html, body { width: 100%; min-height: 100vh; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+      body { background-color: #0A0A0F; color: white; }
       #root { min-height: 100vh; width: 100%; }
+      /* Smooth scrollbar */
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
     </style>
   </head>
   <body>

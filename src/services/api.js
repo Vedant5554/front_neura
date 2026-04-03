@@ -25,13 +25,18 @@ function progressToStep(progress) {
  * @param {string} userId - Persistent user ID for history tracking
  * @param {object} callbacks - Optional callbacks for progress tracking
  * @param {function} callbacks.onProgress - Called with (progress: number, step: string)
+ * @param {object} options - Optional provider options
+ * @param {string} options.provider - "gemini" or "openrouter"
+ * @param {string} options.model - Model name (optional, uses provider default)
+ * @param {AbortSignal} options.signal - Optional AbortSignal to cancel the request
  * @returns {Promise<{code: string, validated: boolean, componentId: string}>}
  */
-export async function generateComponentCode(prompt, userId, callbacks = {}) {
+export async function generateComponentCode(prompt, userId, callbacks = {}, options = {}) {
   const { onProgress } = callbacks;
+  const { provider, model, signal } = options;
 
   // 1. Queue the generation job (or get cache hit)
-  const response = await api.post('/generate', { prompt, userId });
+  const response = await api.post('/generate', { prompt, userId, provider, model }, { signal });
   const data = response.data;
 
   // Handle cache hit — backend returns completed result immediately with no jobId
@@ -53,13 +58,21 @@ export async function generateComponentCode(prompt, userId, callbacks = {}) {
   const startTime = Date.now();
 
   while (true) {
+    if (signal?.aborted) {
+      throw new Error('Generation cancelled by user');
+    }
+
     if (Date.now() - startTime > MAX_POLL_TIME) {
       throw new Error('Generation timed out after 5 minutes');
     }
 
     await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
 
-    const statusRes = await api.get(`/generate/status/${jobId}`);
+    if (signal?.aborted) {
+      throw new Error('Generation cancelled by user');
+    }
+
+    const statusRes = await api.get(`/generate/status/${jobId}`, { signal });
     const { status, progress, result, error: jobError } = statusRes.data;
 
     if (status === 'completed') {
